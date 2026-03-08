@@ -1,0 +1,36 @@
+# Portfolio Project Rules
+
+## Tech Stack
+- Framework: Astro (static site generator) with React islands for interactive components
+- Styling: Tailwind CSS v4 (via @tailwindcss/vite plugin)
+- Icons: Lucide-React
+- Language: TypeScript (strict mode)
+- Deployment: GitHub Pages via GitHub Actions
+
+## Project Structure
+- `src/pages/` — Astro pages (file-based routing)
+- `src/layouts/` — Shared layout templates (`.astro`)
+- `src/components/` — Reusable components (`.astro` for static, `.tsx` for interactive)
+- `src/styles/global.css` — Tailwind entry point
+- `public/` — Static assets (images, fonts, favicon)
+
+## Coding Standards
+- Use `.astro` components for static content (default — ships zero JS).
+- Use `.tsx` React components ONLY when client-side interactivity is needed (e.g., Nav toggle, modals).
+- Always add `client:load` or `client:visible` directive when using React components in Astro pages.
+- Use functional components with TypeScript.
+- Favor semantic HTML (e.g., `<header>`, `<main>`, `<section>`, `<footer>`).
+- Ensure all images have descriptive `alt` tags for accessibility.
+- Use Tailwind's utility classes for all styling; avoid writing custom CSS files unless absolutely necessary.
+- Keep components small and modular (e.g., separate Nav, Hero, ProjectCard, and Footer).
+
+## Design Preferences
+- Modern, clean, and minimalist aesthetic.
+- Responsive design is a priority (mobile-first approach).
+- Use a consistent color palette (recommend a dark/light mode toggle).
+- Dark theme base: zinc-950 background, zinc-100 text, blue-600 accent.
+
+## Project Context
+- My Name: Twan Grooff
+- Role: Robotics engineer / Software engineer
+- Goal: Showcase projects to recruiters and highlight technical skills.
