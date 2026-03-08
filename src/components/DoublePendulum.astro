@@ -28,7 +28,7 @@
     const m2 = 0.5;  // Second link mass
     const L1 = 1.0;  // First link length (m)
     const L2 = 1.0;  // Second link length (m)
-    const g = -9.81;  // Gravity
+    const g = 9.81;  // Gravity
 
     // Render scale: pixels per meter
     const PPM = 100;
@@ -70,48 +70,32 @@
       if (mouseMoveTimeout) clearTimeout(mouseMoveTimeout);
       mouseMoveTimeout = setTimeout(() => {
         isMouseMoving = false;
-      }, 100) as unknown as number;
+      }, 200) as unknown as number;
     });
 
     // --- Equations of Motion ---
 
-    // 1. Mouse-Tracking Mode (Base Excitation)
-    // Here, ddx is given (derived from mouse motion)
-    // We compute ddth1 and ddth2
-    function getDerivativesBase(s: number[], ddx: number) {
+    // The state vector is s = [x, dx, th1, dth1, th2, dth2]
+    // u is the control force applied to the cart
+    function getDerivatives(s: number[], u: number) {
       const [x, dx, th1, dth1, th2, dth2] = s;
 
-      const ddth1_val = (-0.25*L1*Math.pow(dth1, 2)*m2*Math.sin(2*th1 - 2*th2) - 0.5*L2*Math.pow(dth2, 2)*m2*Math.sin(th1 - th2) - 0.5*ddx*m1*Math.cos(th1) - 0.25*ddx*m2*Math.cos(th1) + 0.25*ddx*m2*Math.cos(th1 - 2*th2) + 0.5*g*m1*Math.sin(th1) + 0.25*g*m2*Math.sin(th1) + 0.25*g*m2*Math.sin(th1 - 2*th2))/(L1*(0.5*m1 - 0.25*m2*Math.cos(2*th1 - 2*th2) + 0.25*m2));
-      const ddth2_val = (0.5*L1*Math.pow(dth1, 2)*m1*Math.sin(th1 - th2) + 0.5*L1*Math.pow(dth1, 2)*m2*Math.sin(th1 - th2) + 0.25*L2*Math.pow(dth2, 2)*m2*Math.sin(2*th1 - 2*th2) - 0.25*ddx*m1*Math.cos(th2) + 0.25*ddx*m1*Math.cos(2*th1 - th2) - 0.25*ddx*m2*Math.cos(th2) + 0.25*ddx*m2*Math.cos(2*th1 - th2) - 0.25*g*m1*Math.sin(th2) + 0.25*g*m1*Math.sin(2*th1 - th2) - 0.25*g*m2*Math.sin(th2) + 0.25*g*m2*Math.sin(2*th1 - th2))/(L2*(0.5*m1 - 0.25*m2*Math.cos(2*th1 - 2*th2) + 0.25*m2));
-
-      return [dx, ddx, dth1, ddth1_val, dth2, ddth2_val];
-    }
-
-    // 2. LQR-Controlled Mode
-    // Force u is applied to the cart
-    function getDerivativesLQR(s: number[], u: number) {
-      const [x, dx, th1, dth1, th2, dth2] = s;
-
-      const ddx_val = (0.5*L1*Math.pow(dth1, 2)*Math.pow(m1, 2)*Math.sin(th1) + 0.5*L1*Math.pow(dth1, 2)*m1*m2*Math.sin(th1) + 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th2) + 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(2*th1 - th2) + 0.25*g*Math.pow(m1, 2)*Math.sin(2*th1) + 0.25*g*m1*m2*Math.sin(2*th1) + 0.5*m1*u - 0.25*m2*u*Math.cos(2*th1 - 2*th2) + 0.25*m2*u)/(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2);
-      const ddth1_val = (-0.25*L1*M*Math.pow(dth1, 2)*m2*Math.sin(2*th1 - 2*th2) - 0.25*L1*Math.pow(dth1, 2)*Math.pow(m1, 2)*Math.sin(2*th1) - 0.25*L1*Math.pow(dth1, 2)*m1*m2*Math.sin(2*th1) - 0.5*L2*M*Math.pow(dth2, 2)*m2*Math.sin(th1 - th2) - 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th1 - th2) - 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th1 + th2) - 0.5*M*g*m1*Math.sin(th1) - 0.25*M*g*m2*Math.sin(th1) - 0.25*M*g*m2*Math.sin(th1 - 2*th2) - 0.5*g*Math.pow(m1, 2)*Math.sin(th1) - 0.5*g*m1*m2*Math.sin(th1) - 0.5*m1*u*Math.cos(th1) - 0.25*m2*u*Math.cos(th1) + 0.25*m2*u*Math.cos(th1 - 2*th2))/(L1*(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2));
-      const ddth2_val = (0.5*L1*M*Math.pow(dth1, 2)*m1*Math.sin(th1 - th2) + 0.5*L1*M*Math.pow(dth1, 2)*m2*Math.sin(th1 - th2) + 0.25*L2*M*Math.pow(dth2, 2)*m2*Math.sin(2*th1 - 2*th2) - 0.25*M*g*m1*Math.sin(th2) + 0.25*M*g*m1*Math.sin(2*th1 - th2) - 0.25*M*g*m2*Math.sin(th2) + 0.25*M*g*m2*Math.sin(2*th1 - th2) - 0.25*m1*u*Math.cos(th2) + 0.25*m1*u*Math.cos(2*th1 - th2) - 0.25*m2*u*Math.cos(th2) + 0.25*m2*u*Math.cos(2*th1 - th2))/(L2*(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2));
+      const ddx_val = (0.5*L1*Math.pow(dth1, 2)*Math.pow(m1, 2)*Math.sin(th1) + 0.5*L1*Math.pow(dth1, 2)*m1*m2*Math.sin(th1) + 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th2) + 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(2*th1 - th2) - 0.25*g*Math.pow(m1, 2)*Math.sin(2*th1) - 0.25*g*m1*m2*Math.sin(2*th1) + 0.5*m1*u - 0.25*m2*u*Math.cos(2*th1 - 2*th2) + 0.25*m2*u)/(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2);
+      const ddth1_val = (-0.25*L1*M*Math.pow(dth1, 2)*m2*Math.sin(2*th1 - 2*th2) - 0.25*L1*Math.pow(dth1, 2)*Math.pow(m1, 2)*Math.sin(2*th1) - 0.25*L1*Math.pow(dth1, 2)*m1*m2*Math.sin(2*th1) - 0.5*L2*M*Math.pow(dth2, 2)*m2*Math.sin(th1 - th2) - 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th1 - th2) - 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th1 + th2) + 0.5*M*g*m1*Math.sin(th1) + 0.25*M*g*m2*Math.sin(th1) + 0.25*M*g*m2*Math.sin(th1 - 2*th2) + 0.5*g*Math.pow(m1, 2)*Math.sin(th1) + 0.5*g*m1*m2*Math.sin(th1) - 0.5*m1*u*Math.cos(th1) - 0.25*m2*u*Math.cos(th1) + 0.25*m2*u*Math.cos(th1 - 2*th2))/(L1*(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2));
+      const ddth2_val = (0.5*L1*M*Math.pow(dth1, 2)*m1*Math.sin(th1 - th2) + 0.5*L1*M*Math.pow(dth1, 2)*m2*Math.sin(th1 - th2) + 0.25*L2*M*Math.pow(dth2, 2)*m2*Math.sin(2*th1 - 2*th2) + 0.25*M*g*m1*Math.sin(th2) - 0.25*M*g*m1*Math.sin(2*th1 - th2) + 0.25*M*g*m2*Math.sin(th2) - 0.25*M*g*m2*Math.sin(2*th1 - th2) - 0.25*m1*u*Math.cos(th2) + 0.25*m1*u*Math.cos(2*th1 - th2) - 0.25*m2*u*Math.cos(th2) + 0.25*m2*u*Math.cos(2*th1 - th2))/(L2*(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2));
 
       return [dx, ddx_val, dth1, ddth1_val, dth2, ddth2_val];
     }
 
     // --- RK4 Integrator ---
-    function rk4(s: number[], dt: number, mode: 'base' | 'lqr', controlInput: number) {
-      const getDerivs = (stateArr: number[]) => {
-        return mode === 'base' ? getDerivativesBase(stateArr, controlInput) : getDerivativesLQR(stateArr, controlInput);
-      };
-
-      const k1 = getDerivs(s);
+    function rk4(s: number[], dt: number, u: number) {
+      const k1 = getDerivatives(s, u);
       const s_k2 = s.map((val, i) => val + 0.5 * dt * k1[i]);
-      const k2 = getDerivs(s_k2);
+      const k2 = getDerivatives(s_k2, u);
       const s_k3 = s.map((val, i) => val + 0.5 * dt * k2[i]);
-      const k3 = getDerivs(s_k3);
+      const k3 = getDerivatives(s_k3, u);
       const s_k4 = s.map((val, i) => val + dt * k3[i]);
-      const k4 = getDerivs(s_k4);
+      const k4 = getDerivatives(s_k4, u);
 
       return s.map((val, i) => val + (dt / 6.0) * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
     }
@@ -135,26 +119,6 @@
       // Update Mouse Tracking State smoothly
       mouseTargetX = (mouseX - width / 2) / PPM;
 
-      // We want to strictly track the mouse when it's moving, but we need
-      // a continuous acceleration (ddx) for the Euler-Lagrange equations.
-      // We'll use a critically damped PD controller (spring-damper) to
-      // smoothly pull the cart to the mouse, generating a valid acceleration.
-
-      let currentX = state[0];
-      let currentDx = state[1];
-
-      // PD gains for mouse tracking (stiff spring)
-      const kp = 200.0;
-      const kd = 2.0 * Math.sqrt(kp);
-
-      // Compute the required acceleration to reach the mouse
-      let baseDdx = 0;
-      if (isMouseMoving) {
-         baseDdx = kp * (mouseTargetX - currentX) - kd * currentDx;
-         // Clip to avoid numerical explosion if the mouse teleports
-         baseDdx = Math.max(-150, Math.min(150, baseDdx));
-      }
-
       // Normalize angles for LQR
       state[2] = normalizeAngle(state[2]);
       state[4] = normalizeAngle(state[4]);
@@ -166,21 +130,31 @@
       const substeps = 10;
       const sub_dt = dt / substeps;
 
+      // PD gains for mouse tracking mode
+      const K_p = 50.0;
+      const K_d = 5.0;
+
       for (let i = 0; i < substeps; i++) {
+        let u = 0;
+
         if (isMouseMoving) {
-          // Base Excitation Mode: Use the PD-generated acceleration
-          // RK4 will integrate x and dx using this constant ddx for this frame
-          state = rk4(state, sub_dt, 'base', baseDdx);
+          // Tracking Mode: Simple PD controller
+          u = K_p * (mouseTargetX - state[0]) - K_d * state[1];
+          // Limit control force
+          u = Math.max(-150, Math.min(150, u));
         } else {
-          // LQR or Free Fall Mode
-          let u = 0;
+          // LQR Stabilizing Mode
           if (isRecoverable) {
-            u = -(K[0] * state[0] + K[1] * state[1] + K[2] * state[2] + K[3] * state[3] + K[4] * state[4] + K[5] * state[5]);
+            u = -(K[0] * (state[0] - mouseTargetX) + K[1] * state[1] + K[2] * state[2] + K[3] * state[3] + K[4] * state[4] + K[5] * state[5]);
             // Limit control force
-            u = Math.max(-100, Math.min(100, u));
+            u = Math.max(-150, Math.min(150, u));
+          } else {
+            // Unrecoverable, free swing (maybe still damp the cart a little)
+            u = 0;
           }
-          state = rk4(state, sub_dt, 'lqr', u);
         }
+
+        state = rk4(state, sub_dt, u);
       }
 
       // --- Draw ---
