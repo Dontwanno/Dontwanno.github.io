@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Nav from '../components/Nav';
+import DoublePendulum from '../components/DoublePendulum.astro';
 import ProjectCard from '../components/ProjectCard.astro';
 import Footer from '../components/Footer.astro';
 import { GraduationCap, Briefcase, MapPin, Mail, Github, Linkedin } from 'lucide-react';
@@ -8,6 +9,7 @@ import { GraduationCap, Briefcase, MapPin, Mail, Github, Linkedin } from 'lucide
 
 <Layout title="Twan Grooff — Robotics & Software Engineer">
   <Nav client:load />
+  <DoublePendulum />
 
   <main>
     {/* Hero */}
