@@ -1,0 +1,220 @@
+---
+---
+
+<div class="absolute inset-0 -z-10 w-full overflow-hidden opacity-40">
+  <canvas id="pendulum-canvas" class="block w-full h-full"></canvas>
+</div>
+
+<script>
+  const canvas = document.getElementById('pendulum-canvas') as HTMLCanvasElement;
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    let width = canvas.width;
+    let height = canvas.height;
+
+    const resize = () => {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+    };
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- System Parameters ---
+    const M = 1.0;   // Cart mass
+    const m1 = 0.5;  // First link mass
+    const m2 = 0.5;  // Second link mass
+    const L1 = 1.0;  // First link length (m)
+    const L2 = 1.0;  // Second link length (m)
+    const g = 9.81;  // Gravity
+
+    // Render scale: pixels per meter
+    const PPM = 100;
+
+    // --- LQR Gain Matrix ---
+    // u = -K*x
+    const K = [
+      10.0,      // x
+      17.3,      // x_dot
+      -281.4,    // theta1
+      -11.1,     // theta1_dot
+      1497.5,    // theta2
+      242.4      // theta2_dot
+    ];
+
+    // --- State Vector ---
+    // [x, dx, th1, dth1, th2, dth2]
+    // Upright is th1=0, th2=0
+    let state = [0, 0, Math.PI, 0, Math.PI, 0];
+
+    // Mouse Tracking State
+    let mouseX = width / 2;
+    let mouseTargetX = 0; // Target in meters relative to center
+    let isMouseMoving = false;
+    let mouseMoveTimeout: number | null = null;
+    let lastMouseX = mouseX;
+    let lastTime = performance.now();
+    let mouseDx = 0;
+
+    // Smooth mouse position for cart tracking
+    let smoothMouseX = 0;
+    let smoothMouseDx = 0;
+    let smoothMouseDdx = 0;
+
+    window.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX;
+      isMouseMoving = true;
+
+      if (mouseMoveTimeout) clearTimeout(mouseMoveTimeout);
+      mouseMoveTimeout = setTimeout(() => {
+        isMouseMoving = false;
+      }, 200) as unknown as number;
+    });
+
+    // --- Equations of Motion ---
+
+    // The state vector is s = [x, dx, th1, dth1, th2, dth2]
+    // u is the control force applied to the cart
+    function getDerivatives(s: number[], u: number) {
+      const [x, dx, th1, dth1, th2, dth2] = s;
+
+      const ddx_val = (0.5*L1*Math.pow(dth1, 2)*Math.pow(m1, 2)*Math.sin(th1) + 0.5*L1*Math.pow(dth1, 2)*m1*m2*Math.sin(th1) + 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th2) + 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(2*th1 - th2) - 0.25*g*Math.pow(m1, 2)*Math.sin(2*th1) - 0.25*g*m1*m2*Math.sin(2*th1) + 0.5*m1*u - 0.25*m2*u*Math.cos(2*th1 - 2*th2) + 0.25*m2*u)/(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2);
+      const ddth1_val = (-0.25*L1*M*Math.pow(dth1, 2)*m2*Math.sin(2*th1 - 2*th2) - 0.25*L1*Math.pow(dth1, 2)*Math.pow(m1, 2)*Math.sin(2*th1) - 0.25*L1*Math.pow(dth1, 2)*m1*m2*Math.sin(2*th1) - 0.5*L2*M*Math.pow(dth2, 2)*m2*Math.sin(th1 - th2) - 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th1 - th2) - 0.25*L2*Math.pow(dth2, 2)*m1*m2*Math.sin(th1 + th2) + 0.5*M*g*m1*Math.sin(th1) + 0.25*M*g*m2*Math.sin(th1) + 0.25*M*g*m2*Math.sin(th1 - 2*th2) + 0.5*g*Math.pow(m1, 2)*Math.sin(th1) + 0.5*g*m1*m2*Math.sin(th1) - 0.5*m1*u*Math.cos(th1) - 0.25*m2*u*Math.cos(th1) + 0.25*m2*u*Math.cos(th1 - 2*th2))/(L1*(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2));
+      const ddth2_val = (0.5*L1*M*Math.pow(dth1, 2)*m1*Math.sin(th1 - th2) + 0.5*L1*M*Math.pow(dth1, 2)*m2*Math.sin(th1 - th2) + 0.25*L2*M*Math.pow(dth2, 2)*m2*Math.sin(2*th1 - 2*th2) + 0.25*M*g*m1*Math.sin(th2) - 0.25*M*g*m1*Math.sin(2*th1 - th2) + 0.25*M*g*m2*Math.sin(th2) - 0.25*M*g*m2*Math.sin(2*th1 - th2) - 0.25*m1*u*Math.cos(th2) + 0.25*m1*u*Math.cos(2*th1 - th2) - 0.25*m2*u*Math.cos(th2) + 0.25*m2*u*Math.cos(2*th1 - th2))/(L2*(0.5*M*m1 - 0.25*M*m2*Math.cos(2*th1 - 2*th2) + 0.25*M*m2 - 0.25*Math.pow(m1, 2)*Math.cos(2*th1) + 0.25*Math.pow(m1, 2) - 0.25*m1*m2*Math.cos(2*th1) + 0.25*m1*m2));
+
+      return [dx, ddx_val, dth1, ddth1_val, dth2, ddth2_val];
+    }
+
+    // --- RK4 Integrator ---
+    function rk4(s: number[], dt: number, u: number) {
+      const k1 = getDerivatives(s, u);
+      const s_k2 = s.map((val, i) => val + 0.5 * dt * k1[i]);
+      const k2 = getDerivatives(s_k2, u);
+      const s_k3 = s.map((val, i) => val + 0.5 * dt * k2[i]);
+      const k3 = getDerivatives(s_k3, u);
+      const s_k4 = s.map((val, i) => val + dt * k3[i]);
+      const k4 = getDerivatives(s_k4, u);
+
+      return s.map((val, i) => val + (dt / 6.0) * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
+    }
+
+    // Modulo function that returns values between -PI and PI
+    function normalizeAngle(angle: number) {
+      let a = angle % (2 * Math.PI);
+      if (a > Math.PI) a -= 2 * Math.PI;
+      if (a < -Math.PI) a += 2 * Math.PI;
+      return a;
+    }
+
+    let isRecoverable = false;
+
+    function render(time: number) {
+      // Delta time in seconds (limit max dt to avoid exploding physics on lag)
+      let dt = (time - lastTime) / 1000.0;
+      if (dt > 0.05) dt = 0.05;
+      lastTime = time;
+
+      // Update Mouse Tracking State smoothly
+      mouseTargetX = (mouseX - width / 2) / PPM;
+
+      // Normalize angles for LQR
+      state[2] = normalizeAngle(state[2]);
+      state[4] = normalizeAngle(state[4]);
+
+      // Check if recoverable by LQR (angles within pi/4)
+      isRecoverable = Math.abs(state[2]) < Math.PI / 4 && Math.abs(state[4]) < Math.PI / 4;
+
+      // Multiple integration steps per frame for stability
+      const substeps = 10;
+      const sub_dt = dt / substeps;
+
+      // PD gains for mouse tracking mode
+      const K_p = 50.0;
+      const K_d = 5.0;
+
+      for (let i = 0; i < substeps; i++) {
+        let u = 0;
+
+        if (isMouseMoving) {
+          // Tracking Mode: Simple PD controller
+          u = K_p * (mouseTargetX - state[0]) - K_d * state[1];
+          // Limit control force
+          u = Math.max(-150, Math.min(150, u));
+        } else {
+          // LQR Stabilizing Mode
+          if (isRecoverable) {
+            u = -(K[0] * (state[0] - mouseTargetX) + K[1] * state[1] + K[2] * state[2] + K[3] * state[3] + K[4] * state[4] + K[5] * state[5]);
+            // Limit control force
+            u = Math.max(-150, Math.min(150, u));
+          } else {
+            // Unrecoverable, free swing (maybe still damp the cart a little)
+            u = 0;
+          }
+        }
+
+        state = rk4(state, sub_dt, u);
+      }
+
+      // --- Draw ---
+      ctx.clearRect(0, 0, width, height);
+
+      const [x, dx, th1, dth1, th2, dth2] = state;
+
+      const cartX = width / 2 + x * PPM;
+      const cartY = height / 3;
+
+      const p1X = cartX + L1 * PPM * Math.sin(th1);
+      const p1Y = cartY - L1 * PPM * Math.cos(th1); // Y points down in canvas, but th=0 is upright, so -cos
+
+      const p2X = p1X + L2 * PPM * Math.sin(th2);
+      const p2Y = p1Y - L2 * PPM * Math.cos(th2);
+
+      // Rail
+      ctx.beginPath();
+      ctx.moveTo(0, cartY);
+      ctx.lineTo(width, cartY);
+      ctx.strokeStyle = '#3f3f46'; // zinc-700
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Cart
+      ctx.fillStyle = '#60a5fa'; // blue-400
+      ctx.fillRect(cartX - 25, cartY - 15, 50, 30);
+
+      // Link 1
+      ctx.beginPath();
+      ctx.moveTo(cartX, cartY);
+      ctx.lineTo(p1X, p1Y);
+      ctx.strokeStyle = '#a1a1aa'; // zinc-400
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Mass 1
+      ctx.beginPath();
+      ctx.arc(p1X, p1Y, 10, 0, 2 * Math.PI);
+      ctx.fillStyle = '#f4f4f5'; // zinc-100
+      ctx.fill();
+
+      // Link 2
+      ctx.beginPath();
+      ctx.moveTo(p1X, p1Y);
+      ctx.lineTo(p2X, p2Y);
+      ctx.strokeStyle = '#a1a1aa';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Mass 2
+      ctx.beginPath();
+      ctx.arc(p2X, p2Y, 10, 0, 2 * Math.PI);
+      ctx.fillStyle = '#f4f4f5';
+      ctx.fill();
+
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  }
+</script>
